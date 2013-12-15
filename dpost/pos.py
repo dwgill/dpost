@@ -153,6 +153,16 @@ def pos_tagging(sequence, trans_probs, emit_probs, vocab, tags, start):
 # 6. try it out: run the algorithm on the test data
 tokenizer = nltk.tokenize.TreebankWordTokenizer()
 
+def tag_string_raw(string):
+    sequence = tokenizer.tokenize(string.strip().lower())
+    return pos_tagging(sequence, trans_probs, emit_probs, vocab,
+            reduced_tgs, 'E')
+
+def tag_string_nltk_raw(string):
+    sequence = tokenizer.tokenize(string.strip().lower())
+    nltk_result = (penntb_to_reduced[x[1]] for x in nltk.pos_tag(sequence))
+    return nltk_result
+
 def tag_string(string):
     sequence = tokenizer.tokenize(string.strip().lower())
     my_result = pos_tagging(sequence, trans_probs, emit_probs, vocab,

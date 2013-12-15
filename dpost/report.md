@@ -1,74 +1,96 @@
-Project 3 - Daniel Gill, 12/04/2013
-=======================
+Project 4 - Daniel Gill, 12/13/2013
+===================================
+The aim of this project was to improve the correctness of my previous
+implementation of an HMM-based part-of-speech tagger. I identified three
+possible areas of failure in the original:
 
-In this project I attempted to implement an English part of speech
-tagger by means of a hidden markov model. The project functions, and can
-be used by importing `pos` while in the python interpreter's linefeed
-mode. After the import is complete (during which time a training set
-will have been loaded in, tagged, and analysed) (it takes a minute or
-so), the tagging program can be run with `pos.tag_string(your_string)`. 
+1.  Issues with my selection of possible parts of speech. i.e. my set of
+    possible states was poorly calibrated.
+2.  Logic errors in the smoothing process.
+3.  Logic errors in my implementation of the Viterbi algorithm.
 
-Important decisions made included taking step in the training process of
-ignoring any tag that the treebank system was unable to determine:
+Lacking the time to carefully test any of these areas individually, I 
+opted to address all of them simultaniously.
 
-        if current_tag == '-NONE-':  
-            continue  
+####Possible Parts of Speech####
+Under the recommendation of Tim, I removed the 'symbol' and 
+'interjection' states and merged them into 'noun-like-things' 
+and 'groupings' states respectively. In most corpuses these srates were being 
+recorded exceedingly rarely, which apparently was causing some problems with 
+the way Laplacing Smoothing was implemented.
 
-The other major decision was to dynamically replace all words not found 
-in `vocab` with `'***'` before processing them. This was as opposed to
-dynamically adding the word to the vocabulary as it was encountered in
-the training corpus. The latter option was avoided as it wasn't certain
-just was sort of effect it would have on the laplace smoothing later on.
+####Smoothing Process####
+Initially I tried to 'manually' smooth the data after it was collected.
+This ended up being hard to read/comprehend and therefore maintain, so
+the algorithm was rewritten from scratch. Beforehand, the dictionaries
+containing the transmission probabilities were initialized to
+0 and the smoothing was left for later, whereas now they are initialized
+to `K / (tg_totals[i_tg] + K * len(tg_word_tally[i_tg].values()))`
+where `i_tg` is the initial tag in a state transition, and
+`tg_word_tally` is a dict of dicts such that `tg_word_tally[A][B]` is
+the number of times `A` has been observed to transition to `B`. This is
+then overwritten for any transitions we have observed (see lines
+117-119), but it does mean that any sort of transition conceivable does
+now have a computed (smoothed) probability.
 
-In any case, unfortunately,
-the program  does not seem to implement the algorithm very _correctly_. The
-`pos.tag_string()` function presents as output a string displaying both
-my results and the results of the `nltk.pos_tagger()` function (as
-filtered through `penntb_to_reduced`). There's a very apparent
-inconsistency between the two results, and it's no longer apparent just
-what might be the cause of this. 
+(Emission probabilities is a similar story.)
 
-        pos.tag_string("I was born in a house.")
-        
-        dwgill tagger:  
-        i - G (grouping)  
-        was - AV (adverb-like)  
-        born - AJ (adjective-latterike)  
-        in - N (noun-like)  
-        a - G (grouping)  
-        house - AV (adverb-like)  
-        . - AJ (asdjective-like)  
+####Viterbi Algorithm####
+The viterbi algorithm implementation has been entirely scrapped and
+rewritten. This, too, was ultimately an exercise of making more concise
+and (hopefully) readable code. The biggest change is that backpointer
+went from being a list of dictionaries to a dictionary of lists, and I
+was able to elemenate the need to laboriously backtrack through it to
+reconstruct the the ideal sequence, and instead keep an ideal sequence
+for each given previous state.
 
-        nltk tagger:  
-        i - N (noun-like)  
-        was - V (verb-like)  
-        born - V (verb-like)  
-        in - AV (adverb-like)  
-        a - AJ (adjective-like)  
-        house - N (nounn-like)  
-        . - E (end-of-sentence)  
+Thanks is again due to Tim for suggesting how to handle the max/argmax
+computations. The `operator` module is truly a realm of wizardry.
 
-Ultimately, I can only think of three
-possibilities:
+####Outcome####
+All in all, the tagger seems to preform much better than my previous
+implementation, ultimately almost reaching parity with the default nltk
+tagger.
 
-1.  There is an issue with the tallying and smoothing.
-    -   There might be a off by one error or something to that effect
-        hidden between lines 78 and 113 that is overweighting some
-        samples more than others.
-2.  There is an error in my implementation of the viterbi algorithm.
-    -   There might be an off by one error or somesuch between lines 115
-        and 143 (the rest of the body of `pos_tagging` is just print
-        formatting after that 143). Given my inexperience with the code,
-        it's quite possible that I could have misinterpreted the correct
-        implementation of some element of the algorithm. 
+**Recommended sentences to tag:**
+>   _"These are the times that try mens' souls."_
 
-Initially I had suspected some issues with my training data. I was at
-the time only using as my training data _Alice's Adventures in 
-Wonderland_, with the intent of then testing it against _Through the
-Looking Glass_. However, I have since expanded the training data to
-include several novels by Baum, and this has not resulted in any
-considerable improvement in the program's accuracy.
+Observe how my own implementation still differs from the nltk solution 
+in dealing with apostrophes.
 
-Overall, going just off the code I wrote, I feel like I got maybe
-80-85% to an ideal implementation of this algorithm. But the last 15%
-could not be more confounding.
+>  _"Call me Ishmael"_
+
+Observe that both the nltk tagger and my own solution struggle to 
+figure out what part of speech 'Ishmael' is.
+
+>   _"Alice was beginning to get very tired of sitting by
+>   her sister on thebank, and of having nothing to do: once or twice
+>   she had peeped into thebook her sister was reading, but it had no
+>   pictures or conversations init, 'and what is the use of a book,' thought
+>   Alice 'without pictures orconversation?'"_
+
+This one is a bit more involved. A full comparison is listed below.
+
+    dwgill: N, V, V, V, V, AV, N, AV, V, AV, AJ, N, AV,  
+    nltk:   N, V, V, V, V, AV, V, AV, N, AV, AJ, N, AV,
+
+    dwgill: AJ, N, G, AV, AV, V, N, V, V, G, AV, AV, AJ,  
+    nltk:   AJ, N, G, AV, AV, V, N, V, V, G, AV, AV, N,
+
+    dwgill: N, V, V, AV, AJ, N, AJ, N,  V, N, G, AV, N,  
+    nltk:   N, V, V, AV, AJ, N, N,  AJ, V, V, G, AV, N,
+
+    dwgill: V, AJ, N, AV, N, AV, N, G, AV, N, V, AJ, N,  
+    nltk:   V, AJ, N, AV, N, AV, N, G, N,  N, V, AJ, N,
+
+    dwgill: AV, AJ, N, G, G, V, AV, AJ, N, AV, N, E, G  
+    nltk:   AV, AJ, N, G, G, V, N,  AV, N, AV, N, E, G
+
+All in all, a drastic improvement over previous standards.
+
+####Usage####
+Simply import `pos` into python in an interpreter session. After it's
+finished loading, you can detailed comparisons with
+`pos.tag_string(your_string)`, and raw state fields with
+`pos.tag_string_raw(your_string)` and
+`pos.tag_string_nltk_raw(your_string)`
